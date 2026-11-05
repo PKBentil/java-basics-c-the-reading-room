@@ -1,4 +1,4 @@
-# The Reading Room — Community Library Lending Tracker
+# The Reading Room — Community readingroom.Library Lending Tracker
 
 This is the starter repository for the **Java Basics** applied lab. Read the lab
 brief alongside this repository; it explains the business, what you are being
@@ -18,14 +18,14 @@ The program is plain Java (no external dependencies). You need JDK 21.
 
 ```bash
 mvn compile
-mvn exec:java -Dexec.mainClass=LendingTracker
+mvn exec:java -Dexec.mainClass=readingroom.LendingTracker
 ```
 
 **Or directly with the JDK:**
 
 ```bash
-javac -d target/classes src/main/java/LendingTracker.java
-java -cp target/classes LendingTracker
+javac -d target/classes src/main/java/readingroom.LendingTracker.java
+java -cp target/classes readingroom.LendingTracker
 ```
 
 Run it first, before you change anything, so you can see how it currently

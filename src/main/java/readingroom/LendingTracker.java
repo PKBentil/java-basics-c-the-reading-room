@@ -1,4 +1,4 @@
-// The Reading Room - community library lending tracker
+package readingroom;// The Reading Room - community library lending tracker
 // Original program, built by a volunteer. New volunteers are told not to touch it.
 // Run it first to see the sort of thing they are worried about, and look closely
 // at the items and active loans in the end-of-day report.
@@ -151,7 +151,7 @@ class Library {
         System.out.println("Active loans:");
         for (Loan l : loans) {
             if (l.status.equals("ACTIVE")) {
-                System.out.println("  Loan #" + l.id + ": \"" + l.itemTitle + "\" -> " + l.memberName);
+                System.out.println("  readingroom.Loan #" + l.id + ": \"" + l.itemTitle + "\" -> " + l.memberName);
             }
         }
     }

@@ -43,13 +43,13 @@ The application runs successfully, but its current structure makes changes risky
 
 ### 2.4 High — Internal collections can be modified from outside
 
-**Root cause:** `Library.items`, `Library.members`, and `Member.history` are public lists. `Library.getLoans()` also returns the actual internal loan list.
+**Root cause:** `readingroom.Library`, `readingroom.Library`, and `readingroom.Member` are public lists. `Library.getLoans()` also returns the actual internal loan list.
 
 **Business risk:** Other parts of the program can add, remove, or alter records without the library controlling those changes. This can make reports and lending operations unreliable.
 
 **Required decision:** Keep collections private and expose read-only views or safe access methods.
 
-### 2.5 Medium — Loan rules are tightly coupled to the borrowing method
+### 2.5 Medium — readingroom.Loan rules are tightly coupled to the borrowing method
 
 **Root cause:** `Library.borrow()` contains conditional logic for every supported item type and member type.
 
@@ -90,25 +90,25 @@ The proposed design separates responsibilities:
 ### Proposed relationships
 
 ```text
-                    LendingItem (abstract)
+                    readingroom.LendingItem (abstract)
                      /               \
                   Book             AudioKit
                      \               /
                       registered in
                            |
-                        Library
+                        readingroom.Library
                      /     |     \
                   Items  Members  Loans
                                   |
                            +------+------+
                            |             |
-                         Member      LendingItem
+                         readingroom.Member      readingroom.LendingItem
                            |
                        MemberType
 
-                     LendingTracker
+                     readingroom.LendingTracker
                            |
-                        Library
+                        readingroom.Library
 ```
 
 **Source of truth:** `Library` maintains loan records. Each `Loan` identifies its specific item and member. To determine whether an item is available, the library checks for an active loan associated with that item's unique ID.
@@ -126,7 +126,7 @@ The rebuilt application must retain the original legitimate behaviour:
 3. Standard members can borrow audio kits for 7 days.
 4. Students can borrow audio kits for 14 days.
 5. Items can be returned.
-6. Member borrowing history is maintained.
+6. readingroom.Member borrowing history is maintained.
 7. The end-of-day report displays item availability and active loans.
 
 The intentional correction is that an item already on loan must not be lent to another member.
