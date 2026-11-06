@@ -8,6 +8,11 @@ public abstract class   LendingItem {
     private final String title;
 
     protected LendingItem(String title) {
+
+        if (title == null || title.isBlank()){
+            throw new IllegalArgumentException("Item title cannot be empty");
+        }
+
         this.id = nextId++;
         this.title = title;
     }

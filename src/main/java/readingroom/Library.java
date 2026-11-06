@@ -28,18 +28,27 @@ public class Library {
 
     public void borrow(Member member, LendingItem item) {
 
+        if (!members.contains(member)) {
+            System.out.println("Cannot lend: member is not registered.");
+            return;
+        }
+
+        if (!items.contains(item)) {
+            System.out.println("Cannot lend: items does not belong to this library.");
+            return;
+        }
+
         boolean alreadyOnLoan = loans.stream()
                 .anyMatch(loan ->
                         loan.getItem().getId() == item.getId()
-                                && loan.getStatus() == LoanStatus.ACTIVE);
+                                && loan.getStatus() == LoanStatus.ACTIVE
+                );
 
-        if (alreadyOnLoan) {
-            System.out.println(
-                    "Cannot lend \"" + item.getTitle()
-                            + "\": item is already on loan."
-            );
+        if (alreadyOnLoan){
+            System.out.println("Cannot lend \"" + item.getTitle() + "\": item is already on loan ");
             return;
         }
+
 
         int loanDays = item.calculateLoanDays(member);
 
@@ -119,4 +128,25 @@ public class Library {
             }
         }
     }
+
+    public void printMemberHistory(Member member){
+
+        if (!members.contains(member)){
+            System.out.println("Cannot display history: member is not registered");
+            return;
+        }
+        System.out.println();
+        System.out.println("=== Borrowing history: " + member.getName() + "===");
+
+        if (member.getHistory().isEmpty()) {
+            System.out.println("No borrowing history");
+            return;
+        }
+
+        for(String entry : member.getHistory()){
+            System.out.println(" " + entry);
+        }
+    }
+
+
 }

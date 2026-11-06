@@ -15,6 +15,13 @@ public class Member {
     private final List<String> history;
 
     public Member(String name, MemberType type) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("Member name cannot be empty.");
+        }
+
+        if (type == null) {
+            throw new IllegalArgumentException("Member type cannot be null.");
+        }
         this.id = nextId++;
         this.name = name;
         this.type = type;
@@ -37,7 +44,7 @@ public class Member {
         return Collections.unmodifiableList(history);
     }
 
-    public void recordBorrowing(String itemTitle){
+     void recordBorrowing(String itemTitle){
         history.add("Borrowed " + itemTitle);
     }
 }

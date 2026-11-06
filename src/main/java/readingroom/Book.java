@@ -14,7 +14,7 @@ public class Book extends LendingItem{
 
     @Override
     public String getTypeName() {
-        return "Book";
+        return "BOOK";
     }
 
 
