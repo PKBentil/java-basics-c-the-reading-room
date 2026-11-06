@@ -14,6 +14,19 @@ public class Loan {
     private LoanStatus status;
 
     public Loan(Member member, LendingItem item, int loanDays) {
+
+        if (member == null) {
+            throw new IllegalArgumentException("Loan member cannot be null.");
+        }
+
+        if (item == null) {
+            throw new IllegalArgumentException("Loan item cannot be null");
+        }
+
+        if (loanDays <= 0) {
+            throw new IllegalArgumentException("Loan duration must be positive");
+        }
+
         this.id = nextId++;
         this.member = member;
         this.item = item;
@@ -41,7 +54,7 @@ public class Loan {
         return status;
     }
 
-    public void markReturned() {
+     void markReturned() {
         if (status == LoanStatus.ACTIVE) {
             status = LoanStatus.RETURNED;
         }
