@@ -1,152 +1,108 @@
-
 package readingroom;
 
-import readingroom.enums.LoanStatus;
+import readingroom.exceptions.ItemAlreadyOnLoanException;
+import readingroom.exceptions.ItemNotRegisteredException;
+import readingroom.exceptions.MemberNotRegisteredException;
+import readingroom.exceptions.NoActiveLoanException;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
 
 public class Library {
 
     private final String name;
-    private final List<LendingItem> items = new ArrayList<>();
-    private final List<Member> members = new ArrayList<>();
+    private final Map<Integer, LendingItem> items = new LinkedHashMap<>();
+    private final Map<Integer, Member> members = new LinkedHashMap<>();
+    private final Map<Integer, Loan> activeLoansByItemId = new HashMap<>();
     private final List<Loan> loans = new ArrayList<>();
 
     public Library(String name) {
         this.name = name;
     }
 
+    public String getName() {
+        return name;
+    }
+
     public void addItem(LendingItem item) {
-        items.add(item);
+        if (item == null) {
+            throw new IllegalArgumentException("Item cannot be null");
+        }
+        items.put(item.getId(), item);
     }
 
     public void addMember(Member member) {
-        members.add(member);
+        if (member == null) {
+            throw new IllegalArgumentException("Member cannot be null");
+        }
+        members.put(member.getId(), member);
     }
 
-    public void borrow(Member member, LendingItem item) {
+    public boolean isRegistered(Member member) {
+        return member != null && members.containsKey(member.getId());
+    }
 
-        if (!members.contains(member)) {
-            System.out.println("Cannot lend: member is not registered.");
-            return;
+    public boolean isRegistered(LendingItem item) {
+        return item != null && items.containsKey(item.getId());
+    }
+
+    public Loan borrow(Member member, LendingItem item) {
+        if (!isRegistered(member)) {
+            throw new MemberNotRegisteredException(member == null ? "null" : member.getName());
         }
 
-        if (!items.contains(item)) {
-            System.out.println("Cannot lend: items does not belong to this library.");
-            return;
+        if (!isRegistered(item)) {
+            throw new ItemNotRegisteredException(item == null ? "null" : item.getTitle());
         }
 
-        boolean alreadyOnLoan = loans.stream()
-                .anyMatch(loan ->
-                        loan.getItem().getId() == item.getId()
-                                && loan.getStatus() == LoanStatus.ACTIVE
-                );
-
-        if (alreadyOnLoan){
-            System.out.println("Cannot lend \"" + item.getTitle() + "\": item is already on loan ");
-            return;
+        if (activeLoansByItemId.containsKey(item.getId())) {
+            throw new ItemAlreadyOnLoanException(item.getTitle());
         }
 
-
-        int loanDays = item.calculateLoanDays(member);
-
-        Loan loan = new Loan(member, item, loanDays);
+        Loan loan = new Loan(member, item, item.calculateLoanDays(member));
         loans.add(loan);
-
+        activeLoansByItemId.put(item.getId(), loan);
         member.recordBorrowing(item.getTitle());
 
-        System.out.println(
-                "Lent \"" + item.getTitle() + "\" to "
-                        + member.getName() + " for " + loanDays + " days"
-        );
+        return loan;
     }
 
-    public void returnItem(LendingItem item) {
-
-        for (Loan loan : loans) {
-            if (loan.getItem().getId() == item.getId()
-                    && loan.getStatus() == LoanStatus.ACTIVE) {
-
-                loan.markReturned();
-
-                System.out.println(
-                        "Returned \"" + item.getTitle() + "\""
-                );
-                return;
-            }
+    public Loan returnItem(LendingItem item) {
+        if (!isRegistered(item)) {
+            throw new ItemNotRegisteredException(item == null ? "null" : item.getTitle());
         }
 
-        System.out.println(
-                "Cannot return \"" + item.getTitle()
-                        + "\": no active loan exists."
-        );
+        Loan loan = activeLoansByItemId.remove(item.getId());
+        if (loan == null) {
+            throw new NoActiveLoanException(item.getTitle());
+        }
+
+        loan.markReturned();
+        return loan;
+    }
+
+    public Optional<Loan> findActiveLoan(LendingItem item) {
+        return Optional.ofNullable(activeLoansByItemId.get(item.getId()));
+    }
+
+    public Collection<LendingItem> getItems() {
+        return Collections.unmodifiableCollection(items.values());
     }
 
     public List<Loan> getLoans() {
         return Collections.unmodifiableList(loans);
     }
 
-    public void printReport() {
-
-        System.out.println();
-        System.out.println("=== " + name + " - end of day ===");
-        System.out.println("Items:");
-
-        for (LendingItem item : items) {
-
-            Loan activeLoan = loans.stream()
-                    .filter(loan ->
-                            loan.getItem().getId() == item.getId()
-                                    && loan.getStatus() == LoanStatus.ACTIVE)
-                    .findFirst()
-                    .orElse(null);
-
-            String status = activeLoan == null
-                    ? "AVAILABLE"
-                    : "ON_LOAN";
-
-            System.out.println(
-                    "  \"" + item.getTitle() + "\" ("
-                            + item.getTypeName() + "): " + status
-                            + (activeLoan != null
-                            ? " - with " + activeLoan.getMember().getName()
-                            : "")
-            );
-        }
-
-        System.out.println("Active loans:");
-
-        for (Loan loan : loans) {
-            if (loan.getStatus() == LoanStatus.ACTIVE) {
-                System.out.println(
-                        "  Loan #" + loan.getId() + ": \""
-                                + loan.getItem().getTitle()
-                                + "\" -> " + loan.getMember().getName()
-                );
-            }
-        }
+    public List<Loan> getActiveLoans() {
+        return loans.stream()
+                .filter(loan -> activeLoansByItemId.get(loan.getItem().getId()) == loan)
+                .toList();
     }
-
-    public void printMemberHistory(Member member){
-
-        if (!members.contains(member)){
-            System.out.println("Cannot display history: member is not registered");
-            return;
-        }
-        System.out.println();
-        System.out.println("=== Borrowing history: " + member.getName() + "===");
-
-        if (member.getHistory().isEmpty()) {
-            System.out.println("No borrowing history");
-            return;
-        }
-
-        for(String entry : member.getHistory()){
-            System.out.println(" " + entry);
-        }
-    }
-
-
 }
