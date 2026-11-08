@@ -1,11 +1,8 @@
-
 package readingroom;
 
 import readingroom.enums.LoanStatus;
 
 public class Loan {
-
-    private static int nextId = 1;
 
     private final int id;
     private final Member member;
@@ -14,9 +11,8 @@ public class Loan {
     private LoanStatus status;
 
     public Loan(Member member, LendingItem item, int loanDays) {
-
         if (member == null) {
-            throw new IllegalArgumentException("Loan member cannot be null.");
+            throw new IllegalArgumentException("Loan member cannot be null");
         }
 
         if (item == null) {
@@ -27,7 +23,7 @@ public class Loan {
             throw new IllegalArgumentException("Loan duration must be positive");
         }
 
-        this.id = nextId++;
+        this.id = IdGenerator.nextLoanId();
         this.member = member;
         this.item = item;
         this.loanDays = loanDays;
@@ -54,9 +50,10 @@ public class Loan {
         return status;
     }
 
-     void markReturned() {
-        if (status == LoanStatus.ACTIVE) {
-            status = LoanStatus.RETURNED;
+    void markReturned() {
+        if (status != LoanStatus.ACTIVE) {
+            throw new IllegalStateException("Loan #" + id + " has already been returned");
         }
+        status = LoanStatus.RETURNED;
     }
 }
