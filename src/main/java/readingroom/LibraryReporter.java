@@ -1,5 +1,7 @@
 package readingroom;
 
+import readingroom.exceptions.MemberNotRegisteredException;
+
 import java.io.PrintStream;
 import java.util.Optional;
 
