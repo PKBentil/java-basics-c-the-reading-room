@@ -4,7 +4,7 @@
 
 The rebuilt Reading Room application focuses on protecting business rules, preventing inconsistent records, and making future changes easier to implement.
 
-The design uses object-oriented programming principles, including encapsulation, abstraction, inheritance, and polymorphism.
+The design uses object-oriented programming principles, including encapsulation, abstraction, inheritance, and polymorphism. It also separates lending rules from presentation so that behaviour can be verified by automated tests.
 
 This document explains the major architectural decisions, the alternatives considered, and the trade-offs accepted.
 
@@ -103,15 +103,21 @@ Using loan records as the single source of truth eliminates this duplication.
 
 The library derives availability and current borrower information from active loans when generating reports.
 
+### Implementation note
+
+`Library` keeps every `Loan` in a list, which is the full lending history. It also keeps a map from item ID to the item's active loan. The map holds references to the same `Loan` objects as the list; it is a lookup index, not a second copy of the state. It is only changed inside `borrow` and `returnItem`, so the two cannot drift apart.
+
 ### Alternative considered
 
 The application could maintain item status and borrower information directly on each item and update those fields whenever a loan is created or returned.
 
 However, that would require careful synchronisation between item state and loan state.
 
+A second alternative is to scan the loan list for an active loan every time. That needs no index but costs a full scan on every borrow and report line.
+
 ### Trade-off
 
-The library performs active-loan lookups when determining availability. This is a reasonable trade-off for the small in-memory application and improves consistency.
+The index must be maintained alongside the list. This is a small, localised cost in exchange for constant-time availability checks and an inexpensive guard against double borrowing.
 
 ## 6. Encapsulation and Controlled State Changes
 
@@ -119,7 +125,7 @@ The library performs active-loan lookups when determining availability. This is 
 
 Important object fields are private, and controlled methods are used to access or change state.
 
-Collections are also private. Methods such as `getHistory()` and `getLoans()` return unmodifiable views rather than exposing the internal collections for direct modification.
+Collections are also private. Methods such as `getHistory()`, `getLoans()`, `getItems()` and `getActiveLoans()` return unmodifiable or newly built views rather than exposing the internal collections for direct modification.
 
 Methods such as `recordBorrowing()` and `markReturned()` have package-level access rather than being publicly available.
 
@@ -127,7 +133,7 @@ Methods such as `recordBorrowing()` and `markReturned()` have package-level acce
 
 Encapsulation prevents unrelated parts of the application from directly modifying internal state and bypassing business rules.
 
-For example, callers cannot directly change a loan's status or add arbitrary entries to a member's borrowing history.
+For example, callers cannot directly change a loan's status or add arbitrary entries to a member's borrowing history. They must go through `Library`, which enforces the rules.
 
 ### Alternative considered
 
@@ -135,9 +141,9 @@ Public fields and mutable collection getters are simpler to write, but they expo
 
 ### Trade-off
 
-More controlled methods are required, but the resulting application is easier to maintain and reason about.
+More controlled methods are required, and package-level access means tests of those methods live in the same package. The resulting application is easier to maintain and reason about.
 
-## 7. Validation Before State Changes
+## 7. Validation and Failure Signalling
 
 ### Decision
 
@@ -151,15 +157,28 @@ The library checks that:
 
 Only after these checks does it create a new loan and update member history.
 
+When a rule is broken, `Library` throws a dedicated exception rather than printing a message and returning:
+
+- `MemberNotRegisteredException`
+- `ItemNotRegisteredException`
+- `ItemAlreadyOnLoanException`
+- `NoActiveLoanException`
+
+They share a base class, `LibraryException`, so a caller can handle all lending failures in one place. Returning an already returned loan throws `IllegalStateException`, because that is a misuse of `Loan` rather than a library business rule.
+
 ### Why this approach?
 
 Rejecting invalid operations before changing state prevents partial or inconsistent updates.
 
-For example, an unregistered member must not receive an item, and an item outside the library must not create a loan record.
+Throwing exceptions makes failure visible to the caller. The original approach, printing and returning, gave callers no way to know a request had failed and made failures impossible to test.
+
+### Alternative considered
+
+A result type, such as a `LendingResult` with a success flag and message, would also make failure explicit without exceptions. Checked exceptions would force every caller to handle failures.
 
 ### Trade-off
 
-Validation introduces additional checks, but these checks protect the application's business rules and improve reliability.
+The exceptions are unchecked, so the compiler does not force callers to handle them. This is accepted because these are expected business outcomes that the entry point handles in one place, and unchecked exceptions keep method signatures simple. The cost is several small exception classes.
 
 ## 8. Polymorphism and Future Extension
 
@@ -183,30 +202,72 @@ The central borrowing workflow can remain unchanged.
 
 ### Trade-off
 
-Each new item type must implement the abstract methods required by `LendingItem`. This provides consistency across all lending item types.
+Each new item type must implement the abstract methods required by `LendingItem`. This provides consistency across all lending item types. The item also has to know about `Member`; if rules grew more complex, a separate loan-policy object would be a better home for them.
 
-## 9. Additional Improvement — Member Borrowing History Report
+## 9. Separating Rules from Presentation
 
 ### Decision
 
-A member borrowing-history report was added as an improvement beyond the core rebuild.
+`Library` contains lending rules only and never prints. Output is handled by two classes that write to a `PrintStream`:
 
-The library provides `printMemberHistory(Member member)` to display a registered member's borrowing history.
+- `LibraryReporter` prints the end-of-day report and a member's borrowing history.
+- `LibraryDemo` runs a scripted walkthrough and prints the outcome of each scenario, catching `LibraryException` where a rule is broken.
 
-### Why this improvement?
+`LendingTracker.main` only starts the demo.
 
-The original application maintained borrowing history but did not provide a convenient way to inspect an individual member's records.
+### Why this approach?
 
-The additional report makes the existing history feature more useful and demonstrates how the rebuilt design supports additional functionality.
+Mixing validation, business rules and console output in one method makes the rules hard to test and hard to reuse. Because the reporter accepts any `PrintStream`, tests can capture its output in memory, and the same rules could later be used with a different interface.
+
+### Additional improvement
+
+The member borrowing-history report is an addition beyond the core rebuild. The original application kept history but gave no convenient way to inspect an individual member's records.
 
 ### Trade-off
 
-The history currently records borrowing events as strings. A more advanced system could represent history using dedicated transaction records, including dates and return information.
+There are more classes than a single-file script. The history itself is still stored as strings; a more advanced system could use dedicated transaction records with dates and return information.
 
-## 10. Conclusion
+## 10. Identity and Lookup
+
+### Decision
+
+Items and members are registered in maps keyed by ID, and all lookups use the ID rather than object identity. IDs come from a single `IdGenerator` class that uses thread-safe counters, one each for items, members and loans.
+
+### Why this approach?
+
+The original design used separate static counters in three classes, which duplicated the idea and was not thread-safe. Centralising generation removes the duplication, and atomic counters prevent duplicate IDs under concurrent use. ID-based lookup avoids relying on `equals`, and maps replace linear `contains` searches over lists.
+
+### Alternative considered
+
+Implementing `equals` and `hashCode` on each class, or injecting an ID generator into each object.
+
+### Trade-off
+
+`IdGenerator` is still global static state, which is acceptable for a small in-memory application. Injection would be preferable if IDs needed to be controlled in tests or stored in a database. `Library` itself is not synchronised, so concurrent borrowing would need further work.
+
+## 11. Testing Strategy
+
+### Decision
+
+Behaviour is verified with JUnit 5 tests in `src/test/java/readingroom`:
+
+- `LibraryTest` covers borrowing, returning, rejection cases and the guarantee that a rejected borrow leaves existing loans untouched.
+- `LoanTest` covers loan validation and double returns.
+- `LoanPeriodTest` is parameterized across every item type and member type.
+- `LibraryReporterTest` and `LibraryDemoTest` check output captured from a `PrintStream`.
+
+### Why this approach?
+
+The critical rule, that an item can only be on one active loan at a time, needs a test that fails if the rule is broken. A scripted `main` only shows output and asserts nothing.
+
+### Trade-off
+
+The tests are small and fast but cover the in-memory rules only. There is no persistence layer to test.
+
+## 12. Conclusion
 
 The design prioritises data integrity, encapsulation, clear responsibilities, and extensibility without introducing unnecessary complexity.
 
-The use of an abstract `LendingItem` class, enums, object references, controlled state changes, and loan records as the single source of truth addresses the major risks identified in the original application.
+The use of an abstract `LendingItem` class, enums, object references, controlled state changes, loan records as the single source of truth, exceptions for failures, and a separate presentation layer addresses the major risks identified in the original application.
 
-The result preserves the original legitimate lending behaviour while making invalid operations harder to perform and future extensions easier to implement.
+The result preserves the original legitimate lending behaviour while making invalid operations harder to perform, behaviour verifiable by tests, and future extensions easier to implement.
